@@ -1,99 +1,197 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {MarkdownView, Notice, Plugin} from 'obsidian';
+import {DEFAULT_SETTINGS, VoiceInputSettings, VoiceInputSettingTab} from "./settings";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class VoiceInputPlugin extends Plugin {
+	settings: VoiceInputSettings;
+	private isRecording = false;
+	private mediaRecorder: MediaRecorder | null = null;
+	private audioChunks: Blob[] = [];
+	private stream: MediaStream | null = null;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
+			id: 'toggle-voice-input',
+			name: 'Toggle Recording',
+			callback: () => this.toggleRecording()
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		this.addSettingTab(new VoiceInputSettingTab(this.app, this));
 	}
 
 	onunload() {
+		this.stopRecordingCleanup();
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<VoiceInputSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+	private async toggleRecording() {
+		if (this.isRecording) {
+			await this.stopRecording();
+		} else {
+			await this.startRecording();
+		}
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+	private async startRecording() {
+		try {
+			this.stream = await navigator.mediaDevices.getUserMedia({audio: true});
+			this.audioChunks = [];
+
+			const mimeType = this.getSupportedMimeType();
+			this.mediaRecorder = new MediaRecorder(this.stream, mimeType ? {mimeType} : undefined);
+
+			this.mediaRecorder.ondataavailable = (event) => {
+				if (event.data.size > 0) {
+					this.audioChunks.push(event.data);
+				}
+			};
+
+			this.mediaRecorder.onstop = async () => {
+				await this.processRecording();
+			};
+
+			this.mediaRecorder.start();
+			this.isRecording = true;
+			new Notice('Recording started (run again to stop)');
+		} catch (error) {
+			console.error('Recording start error:', error);
+			new Notice(`Failed: Cannot access microphone - ${error}`);
+		}
 	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	private getSupportedMimeType(): string | null {
+		const mimeTypes = [
+			'audio/webm',
+			'audio/webm;codecs=opus',
+			'audio/ogg;codecs=opus',
+			'audio/mp4',
+		];
+		for (const mimeType of mimeTypes) {
+			if (MediaRecorder.isTypeSupported(mimeType)) {
+				return mimeType;
+			}
+		}
+		return null;
+	}
+
+	private async stopRecording() {
+		if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+			return;
+		}
+
+		this.mediaRecorder.stop();
+		this.isRecording = false;
+		new Notice('Recording stopped');
+
+		this.stopRecordingCleanup();
+	}
+
+	private stopRecordingCleanup() {
+		if (this.stream) {
+			this.stream.getTracks().forEach(track => track.stop());
+			this.stream = null;
+		}
+	}
+
+	private async processRecording() {
+		if (this.audioChunks.length === 0) {
+			new Notice('Failed: No audio data');
+			return;
+		}
+
+		const audioBlob = new Blob(this.audioChunks, {type: 'audio/webm'});
+
+		try {
+			new Notice('Transcribing...');
+			const transcript = await this.transcribe(audioBlob);
+
+			if (!transcript) {
+				new Notice('Failed: Empty transcription result');
+				return;
+			}
+
+			let finalText = transcript;
+
+			if (this.settings.mode === 'llm-format') {
+				new Notice('Formatting with LLM...');
+				try {
+					finalText = await this.formatWithLLM(transcript);
+				} catch (error) {
+					console.error('LLM formatting error:', error);
+					new Notice(`LLM formatting failed, using raw transcription: ${error}`);
+				}
+			}
+
+			this.insertText(finalText);
+		} catch (error) {
+			console.error('Processing error:', error);
+			new Notice(`Failed: ${error}`);
+		}
+	}
+
+	private async transcribe(audioBlob: Blob): Promise<string> {
+		const formData = new FormData();
+		formData.append('file', audioBlob, 'audio.webm');
+		formData.append('model', this.settings.sttModel);
+
+		const url = `${this.settings.sttBaseUrl}/audio/transcriptions`;
+		const response = await fetch(url, {
+			method: 'POST',
+			body: formData
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`STT error (${response.status}): ${errorText}`);
+		}
+
+		const result = await response.json();
+		return result.text;
+	}
+
+	private async formatWithLLM(transcript: string): Promise<string> {
+		const url = `${this.settings.lmBaseUrl}/chat/completions`;
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				model: this.settings.lmModel,
+				messages: [
+					{role: 'system', content: this.settings.systemPrompt},
+					{role: 'user', content: transcript}
+				],
+				temperature: 0.3
+			})
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`LLM error (${response.status}): ${errorText}`);
+		}
+
+		const result = await response.json();
+		return result.choices[0].message.content;
+	}
+
+	private insertText(text: string) {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view) {
+			new Notice('Failed: No editor selected');
+			return;
+		}
+
+		const editor = view.editor;
+		editor.replaceSelection(text + '\n');
+		new Notice('Inserted');
 	}
 }

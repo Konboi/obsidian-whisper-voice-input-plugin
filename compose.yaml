@@ -1,0 +1,40 @@
+services:
+  # STT Server (Whisper)
+  # POST http://localhost:2022/v1/audio/transcriptions
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    ports:
+      - "2022:8000"
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-small
+      - WHISPER__INFERENCE_DEVICE=cpu
+      - ALLOW_ORIGINS=["*"]
+    volumes:
+      - whisper-cache:/root/.cache
+    restart: unless-stopped
+
+  # LLM Server (Ollama) - OpenAI-compatible API
+  # POST http://localhost:11434/v1/chat/completions
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
+  # Auto-download model (first run only)
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: ["/bin/sh", "-c", "sleep 5 && ollama pull gemma2:2b"]
+    restart: "no"
+
+volumes:
+  whisper-cache:
+  ollama-data:
