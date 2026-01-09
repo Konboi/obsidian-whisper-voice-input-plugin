@@ -1,5 +1,17 @@
-import {MarkdownView, Notice, Plugin} from 'obsidian';
+import {MarkdownView, Notice, Plugin, requestUrl} from 'obsidian';
 import {DEFAULT_SETTINGS, VoiceInputSettings, VoiceInputSettingTab} from "./settings";
+
+interface TranscriptionResponse {
+	text: string;
+}
+
+interface LLMResponse {
+	choices: Array<{
+		message: {
+			content: string;
+		};
+	}>;
+}
 
 export default class VoiceInputPlugin extends Plugin {
 	settings: VoiceInputSettings;
@@ -13,7 +25,7 @@ export default class VoiceInputPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-voice-input',
-			name: 'Toggle Recording',
+			name: 'Toggle recording',
 			callback: () => this.toggleRecording()
 		});
 
@@ -63,7 +75,7 @@ export default class VoiceInputPlugin extends Plugin {
 			new Notice('Recording started (run again to stop)');
 		} catch (error) {
 			console.error('Recording start error:', error);
-			new Notice(`Failed: Cannot access microphone - ${error}`);
+			new Notice(`Failed: cannot access microphone - ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -103,7 +115,7 @@ export default class VoiceInputPlugin extends Plugin {
 
 	private async processRecording() {
 		if (this.audioChunks.length === 0) {
-			new Notice('Failed: No audio data');
+			new Notice('Failed: no audio data');
 			return;
 		}
 
@@ -114,26 +126,26 @@ export default class VoiceInputPlugin extends Plugin {
 			const transcript = await this.transcribe(audioBlob);
 
 			if (!transcript) {
-				new Notice('Failed: Empty transcription result');
+				new Notice('Failed: empty transcription result');
 				return;
 			}
 
 			let finalText = transcript;
 
 			if (this.settings.mode === 'llm-format') {
-				new Notice('Formatting with LLM...');
+				new Notice('Formatting...');
 				try {
 					finalText = await this.formatWithLLM(transcript);
 				} catch (error) {
 					console.error('LLM formatting error:', error);
-					new Notice(`LLM formatting failed, using raw transcription: ${error}`);
+					new Notice(`LLM formatting failed, using raw transcription: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 
 			this.insertText(finalText);
 		} catch (error) {
 			console.error('Processing error:', error);
-			new Notice(`Failed: ${error}`);
+			new Notice(`Failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -143,6 +155,7 @@ export default class VoiceInputPlugin extends Plugin {
 		formData.append('model', this.settings.sttModel);
 
 		const url = `${this.settings.sttBaseUrl}/audio/transcriptions`;
+		// eslint-disable-next-line no-restricted-globals -- FormData requires native fetch
 		const response = await fetch(url, {
 			method: 'POST',
 			body: formData
@@ -153,13 +166,14 @@ export default class VoiceInputPlugin extends Plugin {
 			throw new Error(`STT error (${response.status}): ${errorText}`);
 		}
 
-		const result = await response.json();
+		const result = await response.json() as TranscriptionResponse;
 		return result.text;
 	}
 
 	private async formatWithLLM(transcript: string): Promise<string> {
 		const url = `${this.settings.lmBaseUrl}/chat/completions`;
-		const response = await fetch(url, {
+		const response = await requestUrl({
+			url,
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
@@ -174,19 +188,22 @@ export default class VoiceInputPlugin extends Plugin {
 			})
 		});
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			throw new Error(`LLM error (${response.status}): ${errorText}`);
+		if (response.status >= 400) {
+			throw new Error(`LLM error (${response.status}): ${response.text}`);
 		}
 
-		const result = await response.json();
-		return result.choices[0].message.content;
+		const result = response.json as LLMResponse;
+		const content = result.choices[0]?.message?.content;
+		if (!content) {
+			throw new Error('Empty response from language model');
+		}
+		return content;
 	}
 
 	private insertText(text: string) {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view) {
-			new Notice('Failed: No editor selected');
+			new Notice('Failed: no editor selected');
 			return;
 		}
 

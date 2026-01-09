@@ -1,4 +1,4 @@
-import {App, Notice, PluginSettingTab, Setting} from "obsidian";
+import {App, Notice, PluginSettingTab, requestUrl, Setting} from "obsidian";
 import VoiceInputPlugin from "./main";
 
 export type VoiceInputMode = "transcript-only" | "llm-format";
@@ -25,6 +25,10 @@ interface ModelInfo {
 	id: string;
 }
 
+interface ModelsResponse {
+	data: ModelInfo[];
+}
+
 export class VoiceInputSettingTab extends PluginSettingTab {
 	plugin: VoiceInputPlugin;
 
@@ -36,11 +40,11 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 	private async fetchModels(baseUrl: string): Promise<string[]> {
 		const url = `${baseUrl}/models`;
 		try {
-			const response = await fetch(url);
-			if (!response.ok) {
+			const response = await requestUrl({url});
+			if (response.status >= 400) {
 				throw new Error(`HTTP ${response.status}`);
 			}
-			const result = await response.json();
+			const result = response.json as ModelsResponse;
 			return result.data.map((model: ModelInfo) => model.id);
 		} catch (error) {
 			console.error('Failed to fetch models:', error);
@@ -72,7 +76,7 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 		});
 
 		setting.addButton(button => button
-			.setButtonText("Fetch Models")
+			.setButtonText("Fetch models")
 			.onClick(async () => {
 				button.setButtonText("Fetching...");
 				button.setDisabled(true);
@@ -99,9 +103,9 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 						new Notice(`Found ${models.length} model(s)`);
 					}
 				} catch (error) {
-					new Notice(`Failed to fetch models: ${error}`);
+					new Notice(`Failed to fetch models: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
-					button.setButtonText("Fetch Models");
+					button.setButtonText("Fetch models");
 					button.setDisabled(false);
 				}
 			}));
@@ -111,14 +115,12 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", {text: "Voice Input Settings"});
-
 		// STT Section
-		containerEl.createEl("h3", {text: "Speech-to-Text (STT)"});
+		new Setting(containerEl).setName("Speech-to-text").setHeading();
 
 		new Setting(containerEl)
-			.setName("STT Server URL")
-			.setDesc("URL of your local Whisper server. Examples: faster-whisper-server (default port 2022), whisper.cpp server")
+			.setName("Server")
+			.setDesc("Base URL of your local speech-to-text server")
 			.addText(text => text
 				.setPlaceholder("http://127.0.0.1:2022/v1")
 				.setValue(this.plugin.settings.sttBaseUrl)
@@ -129,8 +131,8 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 
 		this.createModelSelector(
 			containerEl,
-			"STT Model",
-			"Select a model from your STT server. Click 'Fetch Models' to load available models.",
+			"Model",
+			"Select a model from your STT server. Click 'Fetch models' to load available models.",
 			() => this.plugin.settings.sttModel,
 			async (model) => {
 				this.plugin.settings.sttModel = model;
@@ -140,14 +142,14 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 		);
 
 		// LLM Section
-		containerEl.createEl("h3", {text: "LLM Formatting (Optional)"});
+		new Setting(containerEl).setName("Text formatting").setHeading();
 
 		new Setting(containerEl)
 			.setName("Mode")
-			.setDesc("Choose whether to use raw transcription or format it with an LLM for better readability")
+			.setDesc("Choose whether to use raw transcription or format it with a language model")
 			.addDropdown(dropdown => dropdown
 				.addOption("transcript-only", "Transcription only (faster)")
-				.addOption("llm-format", "Format with LLM (cleaner output)")
+				.addOption("llm-format", "Format with language model (cleaner output)")
 				.setValue(this.plugin.settings.mode)
 				.onChange(async (value: VoiceInputMode) => {
 					this.plugin.settings.mode = value;
@@ -155,10 +157,11 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName("LLM Server URL")
-			.setDesc("URL of your LLM server. Examples: LM Studio (port 1234), Ollama (port 11434)")
+			.setName("Server")
+			.setDesc("Base URL of your language model server")
 			.addText(text => text
-				.setPlaceholder("http://localhost:1234/v1")
+				// eslint-disable-next-line obsidianmd/ui/sentence-case -- placeholder is a URL
+				.setPlaceholder("http://localhost:11434/v1")
 				.setValue(this.plugin.settings.lmBaseUrl)
 				.onChange(async (value) => {
 					this.plugin.settings.lmBaseUrl = value;
@@ -167,8 +170,8 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 
 		this.createModelSelector(
 			containerEl,
-			"LLM Model",
-			"Select a model from your LLM server. Click 'Fetch Models' to load available models.",
+			"Model",
+			"Select a model from your language model server. Click 'Fetch models' to load available models.",
 			() => this.plugin.settings.lmModel,
 			async (model) => {
 				this.plugin.settings.lmModel = model;
@@ -178,8 +181,8 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 		);
 
 		new Setting(containerEl)
-			.setName("Formatting Prompt")
-			.setDesc("Instructions for the LLM on how to format the transcription")
+			.setName("Formatting prompt")
+			.setDesc("Instructions for the language model on how to format the transcription")
 			.addTextArea(text => {
 				text
 					.setPlaceholder("Format the text...")

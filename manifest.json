@@ -1,9 +1,9 @@
 {
-	"id": "voice-input",
-	"name": "Voice Input",
+	"id": "whisper-voice-input",
+	"name": "Whisper Voice Input",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Voice input plugin using local STT server and LM Studio",
+	"description": "Voice input plugin using local Whisper STT server and LLM",
 	"author": "Konboi",
 	"authorUrl": "https://github.com/Konboi",
 	"isDesktopOnly": true

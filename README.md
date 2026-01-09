@@ -1,6 +1,6 @@
-# Obsidian Voice Input Plugin
+# Obsidian Whisper Voice Input Plugin
 
-A voice input plugin using local STT server and LM Studio. Runs completely locally without cloud APIs.
+A voice input plugin using local Whisper STT server and LLM. Runs completely locally without cloud APIs.
 
 [Japanese README](README.ja.md)
 
@@ -36,13 +36,13 @@ docker compose down
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin
 2. Open BRAT settings
 3. Click "Add Beta plugin"
-4. Enter: `Konboi/obsidian-voice-input-plugin`
+4. Enter: `Konboi/obsidian-whisper-voice-input-plugin`
 5. Enable the plugin in **Settings → Community plugins**
 
 ### Manual Installation
 
-1. Download `main.js` and `manifest.json` from [Releases](https://github.com/Konboi/obsidian-voice-input-plugin/releases)
-2. Create `.obsidian/plugins/voice-input/` folder in your vault
+1. Download `main.js` and `manifest.json` from [Releases](https://github.com/Konboi/obsidian-whisper-voice-input-plugin/releases)
+2. Create `.obsidian/plugins/whisper-voice-input/` folder in your vault
 3. Copy the downloaded files to the folder
 4. Restart Obsidian
 5. Enable plugin in **Settings → Community plugins**
@@ -50,7 +50,7 @@ docker compose down
 ## Usage
 
 1. Open command palette (`Cmd/Ctrl + P`)
-2. Run "Voice Input: Toggle Recording"
+2. Run "Whisper Voice Input: Toggle Recording"
 3. Recording starts (Notice displayed)
 4. Run command again to stop recording
 5. Transcription is automatically inserted at cursor position
