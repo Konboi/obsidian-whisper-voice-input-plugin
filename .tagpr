@@ -1,0 +1,16 @@
+# tagpr configuration
+# https://github.com/Songmu/tagpr
+
+[tagpr]
+versionFile = "manifest.json,package.json"
+command = "npm run build"
+release = true
+releaseBranch = "main"
+
+[tagpr.versionFile]
+manifest.json = "version"
+package.json = "version"
+
+[release]
+minorLabels = ""
+majorLabels = "major"
