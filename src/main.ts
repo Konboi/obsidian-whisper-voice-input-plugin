@@ -52,8 +52,51 @@ export default class VoiceInputPlugin extends Plugin {
 		}
 	}
 
+	private async checkServerHealth(): Promise<{ok: boolean; error?: string}> {
+		const timeout = 3000;
+
+		// Check STT server
+		try {
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), timeout);
+			// eslint-disable-next-line no-restricted-globals -- health check requires native fetch
+			await fetch(this.settings.sttBaseUrl, {
+				method: 'GET',
+				signal: controller.signal
+			});
+			clearTimeout(timeoutId);
+		} catch {
+			return {ok: false, error: `STT server is not responding (${this.settings.sttBaseUrl})`};
+		}
+
+		// Check LLM server if llm-format mode
+		if (this.settings.mode === 'llm-format') {
+			try {
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), timeout);
+				// eslint-disable-next-line no-restricted-globals -- health check requires native fetch
+				await fetch(this.settings.lmBaseUrl, {
+					method: 'GET',
+					signal: controller.signal
+				});
+				clearTimeout(timeoutId);
+			} catch {
+				return {ok: false, error: `LLM server is not responding (${this.settings.lmBaseUrl})`};
+			}
+		}
+
+		return {ok: true};
+	}
+
 	private async startRecording() {
 		try {
+			// Health check before starting recording
+			const health = await this.checkServerHealth();
+			if (!health.ok) {
+				new Notice(`Cannot start: ${health.error}`);
+				return;
+			}
+
 			this.stream = await navigator.mediaDevices.getUserMedia({audio: true});
 			this.audioChunks = [];
 
