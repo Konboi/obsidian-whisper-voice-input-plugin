@@ -1,7 +1,7 @@
 {
 	"id": "whisper-voice-input",
 	"name": "Whisper Voice Input",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"minAppVersion": "0.15.0",
 	"description": "Voice input plugin using local Whisper STT server and LLM",
 	"author": "Konboi",

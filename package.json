@@ -1,13 +1,12 @@
 {
 	"name": "obsidian-whisper-voice-input-plugin",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Voice input plugin for Obsidian using local Whisper STT and LLM",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint ."
 	},
 	"keywords": [],

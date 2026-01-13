@@ -57,16 +57,19 @@ npm run lint         # Run ESLint
 
 ## Release
 
-BRAT requires `main.js` and `manifest.json` as release assets.
+Uses [tagpr](https://github.com/Songmu/tagpr) for automated releases. BRAT requires `main.js` and `manifest.json` as release assets.
 
-```bash
-# 1. Update version in manifest.json and package.json
-# 2. Build
-npm run build
+### How it works
 
-# 3. Create release with assets
-gh release create v0.x.0 main.js manifest.json --title "v0.x.0" --notes "Release notes"
-```
+1. Push/merge to `main` branch triggers tagpr
+2. tagpr creates a release PR with version bump (minor by default)
+3. Merge the release PR to create a GitHub release with assets
+
+### Version bump control
+
+- Default: minor version bump
+- Add `major` label to release PR for major version bump
+- Edit `.tagpr` to customize behavior
 
 ## Notes
 
