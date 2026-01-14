@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-whisper-voice-input-plugin",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Voice input plugin for Obsidian using local Whisper STT and LLM",
 	"main": "main.js",
 	"type": "module",
