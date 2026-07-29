@@ -1,5 +1,7 @@
 # Changelog
 
+## [v0.4.1](https://github.com/Konboi/obsidian-whisper-voice-input-plugin/compare/v0.4.0...v0.4.1) - 2026-07-29
+
 ## [v0.4.0](https://github.com/Konboi/obsidian-whisper-voice-input-plugin/compare/v0.3.0...v0.4.0) - 2026-07-29
 
 - Add Codex local API as an LLM provider, including model discovery and optional API key authentication.
