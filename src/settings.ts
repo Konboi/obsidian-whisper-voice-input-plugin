@@ -1,13 +1,20 @@
 import {App, Notice, PluginSettingTab, requestUrl, Setting} from "obsidian";
 import VoiceInputPlugin from "./main";
+import {
+	authorizationHeaders,
+	LM_PROVIDER_PRESETS,
+	LmProvider,
+} from "./llm-providers";
 
 export type VoiceInputMode = "transcript-only" | "llm-format";
 
 export interface VoiceInputSettings {
 	sttBaseUrl: string;
 	sttModel: string;
+	lmProvider: LmProvider;
 	lmBaseUrl: string;
 	lmModel: string;
+	lmApiKey: string;
 	mode: VoiceInputMode;
 	systemPrompt: string;
 }
@@ -15,8 +22,10 @@ export interface VoiceInputSettings {
 export const DEFAULT_SETTINGS: VoiceInputSettings = {
 	sttBaseUrl: "http://127.0.0.1:2022/v1",
 	sttModel: "Systran/faster-whisper-small",
-	lmBaseUrl: "http://localhost:1234/v1",
-	lmModel: "gemma2:2b",
+	lmProvider: "ollama",
+	lmBaseUrl: LM_PROVIDER_PRESETS.ollama.baseUrl,
+	lmModel: LM_PROVIDER_PRESETS.ollama.model,
+	lmApiKey: "",
 	mode: "transcript-only",
 	systemPrompt: "Format the following transcribed text into natural, readable text. Add appropriate punctuation and fix obvious transcription errors. Do not change the content."
 };
@@ -37,10 +46,13 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	private async fetchModels(baseUrl: string): Promise<string[]> {
+	private async fetchModels(baseUrl: string, apiKey = ""): Promise<string[]> {
 		const url = `${baseUrl}/models`;
 		try {
-			const response = await requestUrl({url});
+			const response = await requestUrl({
+				url,
+				headers: authorizationHeaders(apiKey),
+			});
 			if (response.status >= 400) {
 				throw new Error(`HTTP ${response.status}`);
 			}
@@ -58,7 +70,8 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 		desc: string,
 		getCurrentModel: () => string,
 		setModel: (model: string) => Promise<void>,
-		getBaseUrl: () => string
+		getBaseUrl: () => string,
+		getApiKey: () => string = () => "",
 	): void {
 		const setting = new Setting(containerEl)
 			.setName(name)
@@ -81,7 +94,7 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 				button.setButtonText("Fetching...");
 				button.setDisabled(true);
 				try {
-					const models = await this.fetchModels(getBaseUrl());
+					const models = await this.fetchModels(getBaseUrl(), getApiKey());
 					if (models.length === 0) {
 						new Notice("No models found on the server");
 					} else {
@@ -157,6 +170,26 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName("Server type")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case -- OpenAI is a proper name and API is an initialism
+			.setDesc("Choose a local language model server or enter a custom server that supports OpenAI APIs")
+			.addDropdown(dropdown => dropdown
+				.addOption("ollama", "Ollama")
+				.addOption("codex", "Codex local API")
+				.addOption("custom", "Custom")
+				.setValue(this.plugin.settings.lmProvider)
+				.onChange(async (value: LmProvider) => {
+					this.plugin.settings.lmProvider = value;
+					if (value !== "custom") {
+						const preset = LM_PROVIDER_PRESETS[value];
+						this.plugin.settings.lmBaseUrl = preset.baseUrl;
+						this.plugin.settings.lmModel = preset.model;
+					}
+					await this.plugin.saveSettings();
+					this.display();
+				}));
+
+		new Setting(containerEl)
 			.setName("Server")
 			.setDesc("Base URL of your language model server")
 			.addText(text => text
@@ -165,8 +198,23 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.lmBaseUrl)
 				.onChange(async (value) => {
 					this.plugin.settings.lmBaseUrl = value;
+					this.plugin.settings.lmProvider = "custom";
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName("API key")
+			.setDesc("Optional API key configured on the language model server")
+			.addText(text => {
+				text
+					.setPlaceholder("Leave empty when authentication is disabled")
+					.setValue(this.plugin.settings.lmApiKey)
+					.onChange(async (value) => {
+						this.plugin.settings.lmApiKey = value;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "password";
+			});
 
 		this.createModelSelector(
 			containerEl,
@@ -177,7 +225,8 @@ export class VoiceInputSettingTab extends PluginSettingTab {
 				this.plugin.settings.lmModel = model;
 				await this.plugin.saveSettings();
 			},
-			() => this.plugin.settings.lmBaseUrl
+			() => this.plugin.settings.lmBaseUrl,
+			() => this.plugin.settings.lmApiKey,
 		);
 
 		new Setting(containerEl)

@@ -1,6 +1,6 @@
 # Obsidian Whisper Voice Input Plugin
 
-ローカルWhisper STTサーバーとLLMを使用した音声入力プラグインです。クラウドAPIを使用せず、完全にローカルで動作します。
+Whisper STTサーバーとOpenAI互換LLM APIを使用した音声入力プラグインです。Ollamaによる完全ローカル処理と、ローカルのCodex APIプロキシを選択できます。
 
 ## 機能
 
@@ -10,22 +10,32 @@
 
 ## サーバーセットアップ
 
-Docker Composeで必要なサーバーを起動:
+Docker Composeで音声認識サーバーを起動:
 
 ```bash
 docker compose up -d
 ```
 
-起動するサービス:
-- **STT (faster-whisper-server)**: `http://localhost:2022/v1`
-- **LLM (Ollama)**: `http://localhost:11434/v1`
+**STT (faster-whisper-server)** が `http://localhost:2022/v1` で起動します。
+LLMサーバーは、選択したものを別途起動してください。
+
+### Codex local APIを使用する
+
+[go-openai-api-server-via-codex](https://github.com/Konboi/go-openai-api-server-via-codex)を起動した後、プラグインの設定で次を選択します。
+
+- **Server type**: **Codex local API**
+- **Server**: `http://127.0.0.1:38180/v1`
+- **Model**: **Fetch models**で取得するか、サーバーのモデル名を入力
+- **API key**: サーバーを`--api-key`付きで起動した場合のみ入力
+
+Codex local APIを選択すると、文字起こし結果はローカルプロキシ経由でCodexバックエンドへ送信されます。Vaultの他の内容は送信しません。
 
 ```bash
-# 停止
+# STTサーバーを停止
 docker compose down
 ```
 
-> **Note**: DockerはCPUのみで動作します。Apple Silicon MacでGPUを使用する場合は、[Ollama](https://ollama.ai)と[faster-whisper-server](https://github.com/fedirz/faster-whisper-server)をネイティブインストールしてください。
+> **Note**: Docker ComposeのWhisperはCPUで動作します。Apple Silicon MacでGPUを使用する場合は、[faster-whisper-server](https://github.com/fedirz/faster-whisper-server)をネイティブインストールしてください。
 
 ## インストール
 
@@ -60,8 +70,10 @@ docker compose down
 | STT Server URL | STTサーバーのベースURL | `http://127.0.0.1:2022/v1` |
 | STT Model | Whisperモデル名 | `Systran/faster-whisper-small` |
 | Mode | `Transcription only` または `Format with LLM` | `Transcription only` |
-| LLM Server URL | LLMサーバーのベースURL | `http://localhost:1234/v1` |
-| LLM Model | LLMモデル名 | `gemma2:2b` |
+| Server type | `Ollama`、`Codex local API`、または`Custom` | `Ollama` |
+| LLM Server URL | LLMサーバーのベースURL | `http://127.0.0.1:11434/v1` |
+| LLM Model | LLMモデル名 | `gemma3:4b` |
+| API key | LLMサーバーの任意のAPIキー | 空 |
 | Formatting Prompt | LLM整形時のシステムプロンプト | （デフォルトの整形プロンプト） |
 
 ## トラブルシューティング

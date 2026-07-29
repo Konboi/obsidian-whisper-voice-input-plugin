@@ -1,33 +1,43 @@
 # Obsidian Whisper Voice Input Plugin
 
-A voice input plugin using local Whisper STT server and LLM. Runs completely locally without cloud APIs.
+A voice input plugin using a Whisper STT server and an OpenAI-compatible LLM API. It supports fully local processing with Ollama or a local Codex API proxy.
 
 [Japanese README](README.ja.md)
 
 ## Features
 
 - Voice recording with local STT server transcription
-- Optional text formatting via LM Studio (OpenAI-compatible API)
+- Optional text formatting via an OpenAI-compatible LLM API
 - Insert transcribed text at current cursor position
 
 ## Server Setup
 
-Start the required servers using Docker Compose:
+Start the speech-to-text server using Docker Compose:
 
 ```bash
 docker compose up -d
 ```
 
-This starts:
-- **STT (faster-whisper-server)**: `http://localhost:2022/v1`
-- **LLM (Ollama)**: `http://localhost:11434/v1`
+This starts **STT (faster-whisper-server)** at `http://localhost:2022/v1`.
+Start your selected LLM server separately.
+
+### Using the Codex local API
+
+Start [go-openai-api-server-via-codex](https://github.com/Konboi/go-openai-api-server-via-codex), then select the following plugin settings:
+
+- **Server type**: **Codex local API**
+- **Server**: `http://127.0.0.1:38180/v1`
+- **Model**: Select **Fetch models**, or enter a model exposed by the server
+- **API key**: Enter it only when the server was started with `--api-key`
+
+When the Codex local API is selected, the transcript is sent through the local proxy to the Codex backend. No other vault content is sent.
 
 ```bash
-# Stop servers
+# Stop the STT server
 docker compose down
 ```
 
-> **Note**: Docker runs on CPU only. For GPU acceleration on Apple Silicon Mac, install [Ollama](https://ollama.ai) and [faster-whisper-server](https://github.com/fedirz/faster-whisper-server) natively to use Metal GPU.
+> **Note**: The Docker Compose configuration runs Whisper on CPU. For GPU acceleration on Apple Silicon Mac, install [faster-whisper-server](https://github.com/fedirz/faster-whisper-server) natively to use Metal GPU.
 
 ## Installation
 
@@ -62,8 +72,10 @@ docker compose down
 | STT Server URL | Base URL for STT server | `http://127.0.0.1:2022/v1` |
 | STT Model | Whisper model name | `Systran/faster-whisper-small` |
 | Mode | `Transcription only` or `Format with LLM` | `Transcription only` |
-| LLM Server URL | Base URL for LLM server | `http://localhost:1234/v1` |
-| LLM Model | LLM model name | `gemma2:2b` |
+| Server type | `Ollama`, `Codex local API`, or `Custom` | `Ollama` |
+| LLM Server URL | Base URL for LLM server | `http://127.0.0.1:11434/v1` |
+| LLM Model | LLM model name | `gemma3:4b` |
+| API key | Optional API key for the LLM server | Empty |
 | Formatting Prompt | System prompt for LLM formatting | (Default formatting prompt) |
 
 ## Troubleshooting
@@ -93,9 +105,9 @@ A Markdown file must be open and focused to insert transcription results.
 
 ### LLM Formatting Fails
 
-- Verify LM Studio is running with local server enabled
+- Verify the selected LLM server is running
 - Check that a model is loaded
-- Verify LM Studio Base URL in settings
+- Verify the LLM server URL in settings
 
 If LLM formatting fails, raw transcription is inserted instead.
 

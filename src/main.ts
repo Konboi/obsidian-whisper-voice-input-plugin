@@ -1,5 +1,6 @@
 import {MarkdownView, Notice, Plugin, requestUrl} from 'obsidian';
 import {DEFAULT_SETTINGS, VoiceInputSettings, VoiceInputSettingTab} from "./settings";
+import {authorizationHeaders, inferLmProvider} from "./llm-providers";
 
 interface TranscriptionResponse {
 	text: string;
@@ -37,7 +38,11 @@ export default class VoiceInputPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<VoiceInputSettings>);
+		const savedSettings = await this.loadData() as Partial<VoiceInputSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, savedSettings);
+		if (!savedSettings?.lmProvider) {
+			this.settings.lmProvider = inferLmProvider(this.settings.lmBaseUrl);
+		}
 	}
 
 	async saveSettings() {
@@ -72,14 +77,10 @@ export default class VoiceInputPlugin extends Plugin {
 		// Check LLM server if llm-format mode
 		if (this.settings.mode === 'llm-format') {
 			try {
-				const controller = new AbortController();
-				const timeoutId = setTimeout(() => controller.abort(), timeout);
-				// eslint-disable-next-line no-restricted-globals -- health check requires native fetch
-				await fetch(this.settings.lmBaseUrl, {
-					method: 'GET',
-					signal: controller.signal
+				await requestUrl({
+					url: `${this.settings.lmBaseUrl}/models`,
+					headers: authorizationHeaders(this.settings.lmApiKey),
 				});
-				clearTimeout(timeoutId);
 			} catch {
 				return {ok: false, error: `LLM server is not responding (${this.settings.lmBaseUrl})`};
 			}
@@ -215,20 +216,25 @@ export default class VoiceInputPlugin extends Plugin {
 
 	private async formatWithLLM(transcript: string): Promise<string> {
 		const url = `${this.settings.lmBaseUrl}/chat/completions`;
+		const body: Record<string, unknown> = {
+			model: this.settings.lmModel,
+			messages: [
+				{role: 'system', content: this.settings.systemPrompt},
+				{role: 'user', content: transcript}
+			],
+		};
+		if (this.settings.lmProvider !== "codex") {
+			body.temperature = 0.3;
+		}
+
 		const response = await requestUrl({
 			url,
 			method: 'POST',
 			headers: {
-				'Content-Type': 'application/json'
+				'Content-Type': 'application/json',
+				...authorizationHeaders(this.settings.lmApiKey),
 			},
-			body: JSON.stringify({
-				model: this.settings.lmModel,
-				messages: [
-					{role: 'system', content: this.settings.systemPrompt},
-					{role: 'user', content: transcript}
-				],
-				temperature: 0.3
-			})
+			body: JSON.stringify(body),
 		});
 
 		if (response.status >= 400) {
