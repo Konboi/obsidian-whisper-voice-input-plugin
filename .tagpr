@@ -6,3 +6,4 @@ versionFile = "manifest.json,package.json"
 command = "npm run build"
 release = true
 releaseBranch = "main"
+	vPrefix = true
