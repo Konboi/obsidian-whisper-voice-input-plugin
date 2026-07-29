@@ -3,6 +3,12 @@ name: tagpr
 on:
   push:
     branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to rebuild and upload assets for
+        required: true
+        type: string
 
 jobs:
   tagpr:
@@ -26,13 +32,30 @@ jobs:
 
       - name: tagpr
         id: tagpr
+        if: github.event_name == 'push'
         uses: Songmu/tagpr@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload release assets
-        if: steps.tagpr.outputs.tag != ''
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          TAGPR_TAG: ${{ steps.tagpr.outputs.tag }}
         run: |
-          gh release upload ${{ steps.tagpr.outputs.tag }} main.js manifest.json --clobber
+          if [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$TAGPR_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release assets
+        if: steps.release.outputs.tag != ''
+        run: npm run build
+
+      - name: Upload release assets
+        if: steps.release.outputs.tag != ''
+        run: |
+          gh release upload ${{ steps.release.outputs.tag }} main.js manifest.json styles.css --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
